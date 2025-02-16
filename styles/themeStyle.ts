@@ -2,7 +2,7 @@ import { StyleSheet } from "react-native";
 
 export const themeStyles = StyleSheet.create({
   container: { flex: 1, padding: 10 },
-  darkContainer: { backgroundColor: "#121212" },
+  darkContainer: { backgroundColor: "#000F24" },
   lightContainer: { backgroundColor: "#f8f8f8" },
   card: { padding: 10, marginVertical: 5, borderRadius: 8, elevation: 3 },
   darkCard: { backgroundColor: "#333" },

@@ -8,27 +8,25 @@ import {
   StyleSheet,
   ActivityIndicator,
   FlatList,
-  Modal,
-  Button,
-  Touchable,
 } from "react-native";
-import SimpleLineIcons from "@expo/vector-icons/SimpleLineIcons";
-import Dialog from "react-native-dialog";
 import Feather from "@expo/vector-icons/Feather";
-
 import { useState, useEffect } from "react";
 import Fontisto from "@expo/vector-icons/Fontisto";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import axios from "axios";
 import { useSelector, useDispatch } from "react-redux";
-import { fetchCountries } from "../api/api";
 import { RootState } from "../redux/store";
 import { themeStyles } from "../styles/themeStyle";
 import CountryItem from "../component/countryItem";
 import ThemeToggle from "../component/themeToggle";
-import { setLanguage } from "../redux/languageSlice"; // Redux action for language
 import { useTranslation } from "react-i18next"; //
 import { useLocalSearchParams } from "expo-router";
+import FilterPopup from '../component/filterPopup'
+import LanguagePopup from '../component/languagePopup';
+import { fetchAllCountries, fetchCountriesByLanguage } from '../api/api'
+import * as Font from 'expo-font';
+import {useFonts} from "expo-font"
+import * as SplashScreen from 'expo-splash-screen';
 
 const API_URL = "https://restcountries.com/v3.1/all";
 
@@ -51,11 +49,15 @@ export interface Country {
 }
 
 export default function Home() {
+  const [loaded, error] = useFonts({
+    'Lobster-Regular': require('../assets/fonts/Lobster-Regular.ttf')
+  });
+
   const [countries, setCountries] = useState<Country[]>([]);
   const [loading, setLoading] = useState(true);
   const [filteredCountries, setFilteredCountries] = useState<Country[]>([]);
   const [search, setSearch] = useState("");
-  const [filterDialogVisible, setFilterDialogVisible] = useState(false);
+  const [filterVisible, setFilterVisible] = useState(false);
   const [timezoneDialogVisible, setTimezoneDialogVisible] = useState(false);
   const [selectedTimeZone, setSelectedTimeZone] = useState("");
   const [timezones, setTimezones] = useState<string[]>([]);
@@ -79,80 +81,42 @@ export default function Home() {
         const response = await axios.get<Country[]>(API_URL);
         setCountries(response.data);
         setFilteredCountries(response.data);
+  
         const uniqueTimezones = Array.from(
           new Set(response.data.flatMap((c) => c.timezones || []))
         );
         setTimezones(uniqueTimezones);
+  
         const uniqueContinents = Array.from(
           new Set(response.data.flatMap((c) => c.continents || []))
         );
         setContinents(uniqueContinents);
+  
         const uniqueLanguage = Array.from(
           new Set(response.data.flatMap((c) => c.languages || []))
         );
-        const seen = new Set();
-        const unique = uniqueContinents.filter((item)=>{
-          const key =JSON.stringify(item)
-          if(seen.has(key)){
-            return false
-          }else{
-            seen.add(key)
-            return true
-          }
-        })
+  
         setChosenLanguage(uniqueLanguage);
-        console.log(chosenLanguage);
       } catch (error) {
         console.error("Error fetching countries:", error);
       } finally {
         setLoading(false);
+        await SplashScreen.hideAsync(); // Hide splash screen after fetching is done
       }
     };
-
+  
     fetchCountries();
   }, []);
+  
 
   if (loading) {
     return <ActivityIndicator size="large" style={styles.loader} />;
   }
 
-  const handleContinentSelect = async (continent: string) => {
-    setSelectedContinent(continent.toLocaleLowerCase());
-    setLoading(true); // Show loading state
-    setFilterDialogVisible(false);
-    setTimezoneDialogVisible(false);
-    setShowContinent(false);
-    try {
-      // Fetch country data based on the selected continent
-      const response = await axios.get(
-        `https://restcountries.com/v3.1/region/${continent}`
-      );
-
-      // Extract the countries data from the response
-      const regions = response.data;
-
-      // Set the countries to the state
-      setFilteredCountries(regions);
-    } catch (error) {
-      console.error("Error fetching countries:", error);
-    } finally {
-      setLoading(false); // Hide loading state
-    }
-  };
-
+  
   const handleLanguageSelect = async (language: any) => {
-    setLoading(true); // Show loading state
-    try {
-      const response = await axios.get(
-        `https://restcountries.com/v3.1/lang/${language}`
-      );
-      const countries = response.data;
-      setFilteredCountries(countries);
-    } catch (error) {
-      console.error("Error fetching countries:", error);
-    } finally {
-      setLoading(false); // Hide loading state
-    }
+    const countriesByLanguage = await fetchCountriesByLanguage(language);
+    setFilteredCountries(countriesByLanguage);
   };
 
   const handleSearch = (text: string) => {
@@ -166,13 +130,21 @@ export default function Home() {
       setFilteredCountries(filtered);
     }
   };
+  const handleApplyFilter = (filteredCountries: any) => {
+    // Ensure filteredCountries is an array and contains valid entries
+    if (Array.isArray(filteredCountries) && filteredCountries.length > 0) {
+      setFilteredCountries(filteredCountries);
+    } else {
+      setFilteredCountries([]); // Fallback to an empty array
+    }
+  };
 
   const handleTimeZoneSelect = (timezone: string) => {
     setSelectedTimeZone(timezone);
     setFilteredCountries(
       countries.filter((c) => c.timezones?.includes(timezone))
     );
-    setFilterDialogVisible(false);
+    setFilterVisible(false);
     setTimezoneDialogVisible(false);
     setShowContinent(false);
   };
@@ -189,16 +161,17 @@ export default function Home() {
           flexDirection: "row",
           width: "100%",
           justifyContent: "space-between",
+          alignItems:"center"
         }}
       >
         <Text
           style={{
-            fontFamily: "pacifico",
-            fontSize: 20,
+            fontFamily:"VariableFont_wght",
+            fontSize: 30,
             color: darkMode ? "#ffff" : "#000",
           }}
         >
-          Explore<Text style={{ color: "orange", fontSize: 20 }}>.</Text>
+          Explore<Text style={{ color: "orange", fontSize: 35,  }}>.</Text>
         </Text>
         <ThemeToggle />
       </View>
@@ -254,7 +227,6 @@ export default function Home() {
           <TouchableOpacity
             onPress={() => {
               setShowLanguage(!showLanguage);
-              console.log("i am");
             }}
             style={{
               borderRadius: 3,
@@ -285,7 +257,7 @@ export default function Home() {
           </TouchableOpacity>
 
           <TouchableOpacity
-            onPress={() => setFilterDialogVisible(true)}
+            onPress={() => setFilterVisible(true)}
             style={{
               flexDirection: "row",
               borderWidth: 0.5,
@@ -322,84 +294,17 @@ export default function Home() {
         keyExtractor={(item) => item.name.common}
         renderItem={({ item }) => <CountryItem country={item} />}
       />
+      <FilterPopup
+        visible={filterVisible}
+        onClose={() => setFilterVisible(false)}
+        onApply={handleApplyFilter}
+      />
       {/* Filter Dialog */}
-      <Dialog.Container visible={filterDialogVisible}>
-        <Dialog.Title>Filter</Dialog.Title>
-        <View style={{ gap: 15 }}>
-          <View>
-            <TouchableOpacity
-              onPress={() => {
-                setShowContinent(!showContinent);
-              }}
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <Text style={{ fontSize: 18 }}>Continent</Text>
-              <SimpleLineIcons name="arrow-down" size={20} color="black" />
-            </TouchableOpacity>
-            {showContinent && (
-              <FlatList
-                data={continents}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => (
-                  <Dialog.Button
-                    label={item}
-                    onPress={() => handleContinentSelect(item)}
-                  />
-                )}
-              />
-            )}
-          </View>
-          <View>
-            <TouchableOpacity
-              onPress={() => setTimezoneDialogVisible(!timezoneDialogVisible)}
-              style={{ flexDirection: "row", justifyContent: "space-between" }}
-            >
-              <Text style={{ fontSize: 18 }}>Time Zone</Text>
-              <SimpleLineIcons name="arrow-down" size={20} color="black" />
-            </TouchableOpacity>
-            {timezoneDialogVisible && (
-              <FlatList
-                data={timezones}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }) => (
-                  <Dialog.Button
-                    label={item}
-                    onPress={() => handleLanguageSelect(item)}
-                  />
-                )}
-              />
-            )}
-          </View>
-
-          <Dialog.Button
-            label="Close"
-            onPress={() => setFilterDialogVisible(false)}
-          />
-        </View>
-      </Dialog.Container>
-   <Dialog.Container visible={showLanguage}>
-    <View style={{height:"90%"}}>
-           <FlatList
-                data={chosenLanguage}
-                keyExtractor={(item, index) => index.toString()}
-                renderItem={({ item }:{ item: Record<string, string> }) => {
-                  const languages = Object.values(item) // Join values as a string
-                  return (
-                    <View style={{ padding: 10, borderColor: "#ddd" }}>
-                      <Text>{languages}</Text>
-                    </View>
-                  );
-                }
-              } 
-              />
-          <Dialog.Button
-            label="Close"
-            style={{}}
-            onPress={() => setShowLanguage(false)}
-          />
-          <Pressable onPress={() => console.log("i am working" , chosenLanguage)}><Text>click me</Text></Pressable>
-        </View>
-        </Dialog.Container>
+      <LanguagePopup
+        visible={showLanguage}
+        onClose={() => setShowLanguage(false)}
+        onSelect={handleLanguageSelect}
+      />
     </View>
   );
 }
